@@ -1,7 +1,9 @@
 import sqlite3
+from datetime import datetime, timedelta
 
 def connect_db():
     conn = sqlite3.connect('attendance.db')
+    conn.execute("PRAGMA foreign_keys = ON")  # Enforce foreign key constraints
     return conn
 
 def create_tables():
@@ -38,34 +40,31 @@ def create_tables():
     conn.commit()
     conn.close()
 
-from datetime import datetime, timedelta
-
 def insert_attendance(name, status):
     conn = connect_db()
     cursor = conn.cursor()
-    from datetime import datetime, timedelta
-    # Calculate current IST date string
+
     ist_now = datetime.utcnow() + timedelta(hours=5, minutes=30)
     current_ist_date = ist_now.strftime('%Y-%m-%d')
     timestamp_str = ist_now.strftime('%Y-%m-%d %H:%M:%S')
-    # Check if attendance for this student already exists for current IST date
+
     cursor.execute('''
         SELECT id, status FROM attendance
         WHERE name = ? AND DATE(timestamp) = ?
     ''', (name, current_ist_date))
+
     existing = cursor.fetchone()
+
     if existing:
         existing_id, existing_status = existing
         if existing_status == 'Absent' and status == 'Present':
-            # Update record to Present with new timestamp
             cursor.execute('''
                 UPDATE attendance SET status = ?, timestamp = ? WHERE id = ?
             ''', (status, timestamp_str, existing_id))
             conn.commit()
-        # If already Present, do nothing
         conn.close()
         return
-    # Insert new attendance record
+
     cursor.execute('''
         INSERT INTO attendance (name, status, timestamp) VALUES (?, ?, ?)
     ''', (name, status, timestamp_str))
@@ -89,7 +88,8 @@ def add_student(name, prn):
             INSERT INTO students (name, prn) VALUES (?, ?)
         ''', (name, prn))
         conn.commit()
-    except sqlite3.IntegrityError:
+    except sqlite3.IntegrityError as e:
+        print(f"Integrity Error (Add Student): {e}")
         conn.close()
         return False
     conn.close()
@@ -112,7 +112,8 @@ def update_student(prn, new_name, new_prn):
             UPDATE students SET name = ?, prn = ? WHERE prn = ?
         ''', (new_name, new_prn, prn))
         conn.commit()
-    except sqlite3.IntegrityError:
+    except sqlite3.IntegrityError as e:
+        print(f"Integrity Error (Update Student): {e}")
         conn.close()
         return False
     conn.close()
@@ -127,10 +128,7 @@ def get_all_students():
     return students
 
 def get_attendance_by_date(date_str):
-    """
-    Fetch attendance records for a specific date.
-    date_str should be in 'YYYY-MM-DD' format.
-    """
+    """Fetch attendance records for a specific date. date_str should be in 'YYYY-MM-DD' format."""
     conn = connect_db()
     cursor = conn.cursor()
     cursor.execute('''
